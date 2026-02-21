@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sổ Ghi Điểm Pro v14 - Time Tracking</title>
+    <style>
+        :root { --primary: #1877f2; --success: #42b72a; --warning: #f57c00; --danger: #d32f2f; --bg: #f0f2f5; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; display: flex; justify-content: center; }
+        .app-container { width: 100%; max-width: 550px; min-height: 100vh; padding: 12px; box-sizing: border-box; }
+        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e4e6eb; }
+        
+        /* Layout Grid */
+        .grid-score { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+        .score-box { text-align: center; padding: 10px; border-radius: 10px; background: #f8f9fa; border: 1px solid #eee; }
+        .score-box b { font-size: 18px; display: block; margin-top: 2px; }
+        
+        .history-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: 6px; margin-top: 10px; }
+        .h-item { background: #f9fafb; padding: 6px; border-radius: 6px; text-align: center; border: 1px solid #f0f2f5; }
+        .h-item-name { font-size: 10px; color: #888; text-transform: uppercase; display: block; font-weight: bold; }
+        
+        /* Controls */
+        input { width: 100%; border: 1px solid #dddfe2; padding: 12px; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
+        .btn { border: none; border-radius: 8px; padding: 12px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.2s; }
+        .btn-blue { background: var(--primary); color: white; }
+        .btn-orange { background: var(--warning); color: white; }
+        
+        .quick-actions { display: flex; gap: 4px; overflow-x: auto; padding: 8px 0; scrollbar-width: none; }
+        .q-btn { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 6px 12px; font-size: 11px; font-weight: bold; white-space: nowrap; }
+
+        .pos { color: var(--primary); }
+        .neg { color: var(--danger); }
+        .deleted { opacity: 0.4; filter: grayscale(0.8); pointer-events: none; }
+        .hidden { display: none; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .timestamp { font-size: 10px; color: #999; font-weight: normal; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div id="lobby-screen">
+        <h2 style="text-align:center; color: var(--primary); letter-spacing: -1px;">SỔ GHI ĐIỂM</h2>
+        <div class="card">
+            <input id="tableName" type="text" placeholder="Tên bàn mới..." onkeydown="if(event.keyCode==13) createNewTable()">
+            <button onclick="createNewTable()" class="btn btn-blue" style="margin-top:10px">TẠO BÀN</button>
+        </div>
+        <div id="tableList"></div>
+    </div>
+
+    <div id="game-screen" class="hidden">
+        <header>
+            <button onclick="backToLobby()" style="background:none; border:none; color:var(--primary); font-weight:bold; cursor:pointer; font-size:15px">← Sảnh</button>
+            <h3 id="currentTableTitle" style="margin:0; font-size: 16px; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></h3>
+            <button onclick="toggleMergeArea()" style="background:#e7f3ff; border:none; color:var(--primary); padding:6px 12px; border-radius:20px; font-size:12px; font-weight:bold">+ Gộp bàn</button>
+        </header>
+
+        <div id="merge-area" class="card hidden">
+            <select id="mergeSourceSelect" style="width:100%; padding:10px; border-radius:8px; margin-bottom:10px; border:1px solid #ddd"></select>
+            <div style="display:flex; gap:10px">
+                <button onclick="executeMerge()" class="btn btn-blue" style="padding:8px">Gộp điểm</button>
+                <button onclick="toggleMergeArea()" class="btn" style="background:#eee; padding:8px">Hủy</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div id="scoreBoard" class="grid-score"></div>
+            <div style="display:flex; gap:8px; margin-top:12px; border-top:1px solid #eee; padding-top:12px">
+                <input id="quickAddPlayerName" type="text" placeholder="Thêm tên người mới..." style="padding:8px; font-size:14px" onkeydown="if(event.keyCode==13) addPlayerDirect()">
+                <button onclick="addPlayerDirect()" class="btn btn-blue" style="width:70px; padding:8px; font-size:12px">Thêm</button>
+            </div>
+        </div>
+
+        <div class="card" style="border-top: 5px solid var(--warning);">
+            <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom:12px">
+                <b style="color:var(--warning); font-size: 14px;">NHẬP VÁN MỚI</b>
+                <button onclick="autoFillMissing()" style="font-size:10px; padding:4px 10px; border-radius:20px; border:none; background:#fff3e0; color:var(--warning); font-weight:bold">TÍNH Ô TRỐNG</button>
+            </div>
+            <div id="roundInputs"></div>
+            <div id="sumWarning" style="text-align:center; font-size:13px; font-weight:bold; margin:10px 0"></div>
+            <input id="roundNote" type="text" placeholder="Ghi chú ván..." style="font-size:14px">
+            <button onclick="saveRound()" class="btn btn-orange" style="margin-top:15px">LƯU KẾT QUẢ</button>
+        </div>
+
+        <div id="historyLog"></div>
+        <div style="text-align:center; margin: 30px 0"><button onclick="resetCurrentTable()" style="background:none; border:none; color:var(--danger); font-size:11px; opacity:0.4; cursor:pointer">Xóa vĩnh viễn bàn này</button></div>
+    </div>
+</div>
+
+<script>
+    let allTables = {}; let currentTableID = null;
+    const STORAGE_KEY = 'score_pro_v14_time';
+
+    function formatTime(dateObj) {
+        const d = new Date(dateObj);
+        return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    }
+
+    function formatDate(dateObj) {
+        const d = new Date(dateObj);
+        return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+    }
+
+    window.onload = () => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) allTables = JSON.parse(saved);
+        renderLobby();
+    };
+
+    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(allTables)); }
+
+    function createNewTable() {
+        const n = document.getElementById('tableName').value.trim();
+        if (!n) return;
+        const now = new Date();
+        const id = 't' + now.getTime() + Math.floor(Math.random() * 1000);
+        allTables[id] = { 
+            name: n, 
+            players: [], 
+            history: [], 
+            isStarted: true,
+            createdAt: now.getTime() // Lưu thời gian tạo bàn
+        };
+        document.getElementById('tableName').value = "";
+        save(); openTable(id);
+    }
+
+    function renderLobby() {
+        document.getElementById('lobby-screen').classList.remove('hidden');
+        document.getElementById('game-screen').classList.add('hidden');
+        const list = document.getElementById('tableList');
+        const keys = Object.keys(allTables).sort((a,b) => (allTables[b].createdAt || 0) - (allTables[a].createdAt || 0));
+        
+        list.innerHTML = keys.length ? keys.map(id => {
+            const table = allTables[id];
+            const timeStr = table.createdAt ? `${formatDate(table.createdAt)} ${formatTime(table.createdAt)}` : 'N/A';
+            return `
+            <div class="card" onclick="openTable('${id}')" style="display:flex; justify-content:space-between; align-items:center; border-left:6px solid var(--primary); cursor:pointer">
+                <div>
+                    <b>${table.name}</b><br>
+                    <small style="color:#65676b">${table.players.length} người • ${table.history.length} ván</small><br>
+                    <span class="timestamp">Tạo: ${timeStr}</span>
+                </div>
+                <span style="color:var(--primary); font-weight:bold">➔</span>
+            </div>`;
+        }).join('') : '<p style="text-align:center; color:#999; margin-top:20px">Chưa có bàn nào</p>';
+    }
+
+    function openTable(id) {
+        currentTableID = id;
+        document.getElementById('lobby-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('currentTableTitle').innerText = allTables[id].name;
+        renderPlayArea();
+        window.scrollTo(0,0);
+    }
+
+    function addPlayerDirect() {
+        const input = document.getElementById('quickAddPlayerName');
+        const name = input.value.trim();
+        if (!name || allTables[currentTableID].players.includes(name)) return;
+        allTables[currentTableID].players.push(name);
+        input.value = ""; save(); renderPlayArea();
+    }
+
+    function renderPlayArea() {
+        const table = allTables[currentTableID];
+        let totals = {}; table.players.forEach(p => totals[p] = 0);
+        table.history.forEach(r => { if(!r.deleted) table.players.forEach(p => totals[p] += (r.scores[p] || 0)); });
+
+        document.getElementById('scoreBoard').innerHTML = table.players.map(p => `
+            <div class="score-box"><small>${p}</small><b class="${totals[p]<0?'neg':(totals[p]>0?'pos':'')}">${totals[p]>0?'+':''}${totals[p]}</b></div>`).join('');
+        
+        document.getElementById('roundInputs').innerHTML = table.players.map((p, i) => `
+            <div style="margin-bottom:12px; border-bottom:1px solid #f9fafb; padding-bottom:8px">
+                <div style="font-size:13px; font-weight:bold; margin-bottom:6px; color:#555">${p}</div>
+                <input type="tel" id="i-${i}" oninput="handleInput(event, ${i})" onkeydown="handleInput(event, ${i})" placeholder="Nhập điểm...">
+                <div class="quick-actions">
+                    ${[1, 5, 10, -1, -5, -10].map(v => `<button class="q-btn" onclick="quickAdd(${i}, ${v})">${v>0?'+'+v:v}</button>`).join('')}
+                </div>
+            </div>`).join('');
+        renderHistory();
+    }
+
+    function quickAdd(idx, val) {
+        const input = document.getElementById(`i-${idx}`);
+        input.value = (parseInt(input.value) || 0) + val;
+        checkSum();
+    }
+
+    function handleInput(e, i) {
+        const input = e.target;
+        if (e.data === '-') {
+            let v = input.value; let num = v.replace(/-/g, '');
+            if (num !== "") { let m = (v.match(/-/g) || []).length; input.value = (m % 2 !== 0) ? -parseInt(num) : parseInt(num); } 
+            else input.value = "-";
+            checkSum();
+        }
+        if (e.keyCode === 13) {
+            e.preventDefault();
+            const next = document.getElementById(`i-${i+1}`);
+            if (next) next.focus(); else saveRound();
+        }
+    }
+
+    function renderHistory() {
+        const table = allTables[currentTableID];
+        document.getElementById('historyLog').innerHTML = table.history.length ? table.history.map((r, idx) => `
+            <div class="card" style="border-left:4px solid var(--primary); padding:12px; position:relative; overflow:hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #f0f2f5; padding-bottom:5px">
+                    <div style="${r.deleted?'text-decoration:line-through; opacity:0.5':''}">
+                        <b style="font-size:12px; color:#333">VÁN ${table.history.length - idx}</b>
+                        <span class="timestamp" style="margin-left:5px">${formatTime(r.time)}</span>
+                        ${r.note?`<br><span style="color:var(--warning);font-size:11px;font-weight:normal">${r.note}</span>`:''}
+                    </div>
+                    <button onclick="toggleRow(${idx})" style="background:#f8f9fa; border:1px solid #ddd; border-radius:4px; font-size:10px; padding:3px 8px; cursor:pointer">${r.deleted?'MỞ':'XÓA'}</button>
+                </div>
+                <div class="history-grid ${r.deleted?'deleted':''}">
+                    ${table.players.map(p => `<div class="h-item"><span class="h-item-name">${p}</span><b class="h-item-val ${r.scores[p]<0?'neg':(r.scores[p]>0?'pos':'')}">${r.scores[p]>0?'+':''}${r.scores[p]||0}</b></div>`).join('')}
+                </div>
+            </div>`).join('') : '<p style="text-align:center; color:#ccc; font-size:12px">Chưa có lịch sử</p>';
+    }
+
+    function toggleRow(idx) {
+        allTables[currentTableID].history[idx].deleted = !allTables[currentTableID].history[idx].deleted;
+        save(); renderPlayArea();
+    }
+
+    function checkSum() {
+        let sum = 0; allTables[currentTableID].players.forEach((_, i) => sum += (parseInt(document.getElementById(`i-${i}`).value) || 0));
+        const w = document.getElementById('sumWarning');
+        w.innerText = sum === 0 ? "✓ Điểm cân bằng" : "⚠ Lệch: " + sum;
+        w.style.color = sum === 0 ? "var(--success)" : "var(--danger)";
+    }
+
+    function saveRound() {
+        const table = allTables[currentTableID]; let sc = {}; let sum = 0;
+        let hasData = false;
+        table.players.forEach((p, i) => {
+            let val = document.getElementById(`i-${i}`).value;
+            let v = parseInt(val) || 0;
+            if(val !== "") hasData = true;
+            sc[p] = v; sum += v;
+        });
+        if(!hasData) return;
+        if (sum !== 0 && !confirm("Tổng điểm đang lệch " + sum + ", vẫn lưu?")) return;
+        
+        table.history.unshift({ 
+            scores: sc, 
+            note: document.getElementById('roundNote').value, 
+            deleted: false,
+            time: new Date().getTime() // Lưu thời gian ván đấu
+        });
+        
+        document.getElementById('roundNote').value = ""; save(); renderPlayArea();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function autoFillMissing() {
+        let eIdx = -1, sum = 0, count = 0;
+        allTables[currentTableID].players.forEach((_, i) => {
+            let v = document.getElementById(`i-${i}`).value;
+            if (v === "") { eIdx = i; count++; } else sum += (parseInt(v) || 0);
+        });
+        if (count !== 1) return alert("Để trống đúng 1 người!");
+        document.getElementById(`i-${eIdx}`).value = -sum; checkSum();
+    }
+
+    function toggleMergeArea() {
+        const area = document.getElementById('merge-area');
+        area.classList.toggle('hidden');
+        if (!area.classList.contains('hidden')) {
+            const sel = document.getElementById('mergeSourceSelect');
+            const keys = Object.keys(allTables).filter(id => id !== currentTableID);
+            if(!keys.length) { alert("Không có bàn khác!"); area.classList.add('hidden'); return; }
+            sel.innerHTML = keys.map(id => `<option value="${id}">${allTables[id].name}</option>`).join('');
+        }
+    }
+
+    function executeMerge() {
+        const sourceID = document.getElementById('mergeSourceSelect').value;
+        const source = allTables[sourceID]; const target = allTables[currentTableID];
+        if(!confirm(`Gộp điểm từ "${source.name}"?`)) return;
+        let sourceTotals = {}; source.players.forEach(p => sourceTotals[p] = 0);
+        source.history.forEach(r => { if(!r.deleted) source.players.forEach(p => sourceTotals[p] += (r.scores[p]||0)); });
+        Object.keys(sourceTotals).forEach(p => { if (!target.players.includes(p)) target.players.push(p); });
+        let mergeScores = {}; target.players.forEach(p => mergeScores[p] = sourceTotals[p] || 0);
+        target.history.unshift({ scores: mergeScores, note: `Gộp từ: ${source.name}`, deleted: false, time: new Date().getTime() });
+        save(); toggleMergeArea(); renderPlayArea();
+    }
+
+    function backToLobby() { currentTableID = null; renderLobby(); }
+    function resetCurrentTable() { if(confirm("Xóa vĩnh viễn bàn này?")) { delete allTables[currentTableID]; save(); renderLobby(); } }
+</script>
+</body>
+</html>
